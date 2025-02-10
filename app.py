@@ -25,14 +25,28 @@ def get_books():
 # Ruta para buscar libros por autor, categoría, editorial o título
 @app.route("/books/search", methods=["GET"])
 def search_books():
-    field = request.args.get("field")  # Puede ser 'author', 'category', 'publisher' o 'title'
-    value = request.args.get("value")
+    author = request.args.get("author")  # Ahora estamos buscando el parámetro 'author' directamente
+    category = request.args.get("category")
+    publisher = request.args.get("publisher")
+    title = request.args.get("title")
 
-    if not field or not value:
+    # Verificamos si al menos uno de los parámetros de búsqueda está presente
+    if not any([author, category, publisher, title]):
         return jsonify({"error": "Faltan parámetros"}), 400
 
-    books_ref = db.collection("books").where(field, "==", value).get()
-    books = [book.to_dict() for book in books_ref]
+    # Creamos la referencia para la búsqueda
+    books_ref = db.collection("books")
+
+    if author:
+        books_ref = books_ref.where("author", "==", author)
+    if category:
+        books_ref = books_ref.where("category", "==", category)
+    if publisher:
+        books_ref = books_ref.where("publisher", "==", publisher)
+    if title:
+        books_ref = books_ref.where("title", "==", title)
+
+    books = [book.to_dict() for book in books_ref.get()]
     return jsonify(books), 200
 
 # Ruta para obtener los libros más populares
