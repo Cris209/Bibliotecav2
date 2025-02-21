@@ -7,93 +7,90 @@ import os
 
 # Inicializar Firebase
 firebase_config = json.loads(os.getenv("FIREBASE_CREDENTIALS"))
-
 cred = credentials.Certificate(firebase_config)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
+# Configurar Flask
 app = Flask(__name__)
-CORS(app)  # Permite que el frontend pueda hacer peticiones
+CORS(app)
 
-# Ruta para obtener todos los libros
+# Token de administrador (almacenado en variable de entorno para seguridad)
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "default_admin_token")
+
+# 📚 Obtener todos los libros
 @app.route("/books", methods=["GET"])
 def get_books():
     books_ref = db.collection("books").get()
     books = [book.to_dict() for book in books_ref]
     return jsonify(books), 200
 
-# Ruta para buscar libros por autor, categoría, editorial o título
+# 🔍 Buscar libros por autor, categoría, editorial o título
 @app.route("/books/search", methods=["GET"])
 def search_books():
-    author = request.args.get("author")  # Ahora estamos buscando el parámetro 'author' directamente
-    category = request.args.get("category")
-    publisher = request.args.get("publisher")
-    title = request.args.get("title")
+    author = request.args.get("author", "").lower()
+    category = request.args.get("category", "").lower()
+    publisher = request.args.get("publisher", "").lower()
+    title = request.args.get("title", "").lower()
 
-    # Verificamos si al menos uno de los parámetros de búsqueda está presente
-    if not any([author, category, publisher, title]):
-        return jsonify({"error": "Faltan parámetros"}), 400
+    books_ref = db.collection("books").get()
+    books = [book.to_dict() for book in books_ref]
 
-    # Creamos la referencia para la búsqueda
-    books_ref = db.collection("books")
+    # Filtrar en Python
+    filtered_books = [
+        book for book in books if (
+            (not author or author in book.get("author", "").lower()) and
+            (not category or category in book.get("category", "").lower()) and
+            (not publisher or publisher in book.get("publisher", "").lower()) and
+            (not title or title in book.get("title", "").lower())
+        )
+    ]
 
-    if author:
-        books_ref = books_ref.where("author", "==", author)
-    if category:
-        books_ref = books_ref.where("category", "==", category)
-    if publisher:
-        books_ref = books_ref.where("publisher", "==", publisher)
-    if title:
-        books_ref = books_ref.where("title", "==", title)
+    return jsonify(filtered_books), 200
 
-    books = [book.to_dict() for book in books_ref.get()]
-    return jsonify(books), 200
-
-# Ruta para obtener los libros más populares
+# 🌟 Obtener los libros más populares
 @app.route("/books/popular", methods=["GET"])
 def get_popular_books():
     popular_books = db.collection("books").order_by("popularity", direction=firestore.Query.DESCENDING).limit(5).get()
     books = [book.to_dict() for book in popular_books]
     return jsonify(books), 200
 
-# Ruta para iniciar sesión (aquí puedes agregar la lógica de autenticación que necesites)
-@app.route("/auth/login", methods=["POST"])
-def login():
-    data = request.get_json()
-    username = data.get("username")
-    password = data.get("password")
+# 🆕 Agregar un nuevo libro (Solo admin)
+@app.route("/books", methods=["POST"])
+def add_book():
+    # Verificar si el usuario es administrador
+    token = request.headers.get("Authorization")
+    if not token or token != f"Bearer {ADMIN_TOKEN}":
+        return jsonify({"error": "No autorizado"}), 403
 
-    # Aquí iría la lógica de validación de usuario
-    if username == "test" and password == "password":
-        return jsonify({"message": "Inicio de sesión exitoso"}), 200
-    return jsonify({"error": "Credenciales incorrectas"}), 401
+    data = request.json
+    if not data or not all(key in data for key in ["title", "author", "category", "publisher", "popularity"]):
+        return jsonify({"error": "Faltan datos"}), 400
 
-# Ruta para obtener las categorías
-@app.route("/categories", methods=["GET"])
-def get_categories():
-    categories_ref = db.collection("categories").get()
-    categories = [category.to_dict() for category in categories_ref]
-    return jsonify(categories), 200
+    # Guardar en Firestore
+    new_book_ref = db.collection("books").document()
+    new_book_ref.set(data)
 
-# Ruta para obtener detalles de un libro específico
-@app.route("/books/<book_id>", methods=["GET"])
-def get_book_details(book_id):
-    book_ref = db.collection("books").document(book_id).get()
-    if book_ref.exists:
-        return jsonify(book_ref.to_dict()), 200
-    return jsonify({"error": "Libro no encontrado"}), 404
+    return jsonify({"message": "Libro agregado correctamente"}), 201
 
-# Ruta para descargar un libro (esto puede ser una URL de descarga o un archivo que subas)
-@app.route("/books/<book_id>/download", methods=["GET"])
-def download_book(book_id):
-    book_ref = db.collection("books").document(book_id).get()
-    if book_ref.exists:
-        book = book_ref.to_dict()
-        # Suponiendo que cada libro tiene un enlace de descarga en el campo 'download_link'
-        return jsonify({"download_link": book.get("download_link")}), 200
-    return jsonify({"error": "Libro no encontrado"}), 404
+# 🗑 Eliminar un libro (Solo admin)
+@app.route("/books/<book_id>", methods=["DELETE"])
+def delete_book(book_id):
+    # Verificar si el usuario es administrador
+    token = request.headers.get("Authorization")
+    if not token or token != f"Bearer {ADMIN_TOKEN}":
+        return jsonify({"error": "No autorizado"}), 403
 
-# Iniciar el servidor en la nube
+    book_ref = db.collection("books").document(book_id)
+    
+    # Verificar si el libro existe
+    if not book_ref.get().exists:
+        return jsonify({"error": "Libro no encontrado"}), 404
+
+    book_ref.delete()
+    return jsonify({"message": "Libro eliminado correctamente"}), 200
+
+# Iniciar el servidor
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
