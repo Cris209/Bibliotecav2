@@ -17,7 +17,7 @@ app = Flask(__name__)
 CORS(app)
 
 # API Key de Google Books
-GOOGLE_BOOKS_API_KEY = os.getenv("'AIzaSyCNaLXQirFNEXYFeAS8RTg8YbYe12Z2DNs")
+GOOGLE_BOOKS_API_KEY = os.getenv("AIzaSyCNaLXQirFNEXYFeAS8RTg8YbYe12Z2DNs")
 
 # Función para obtener libros desde Google Books API
 def fetch_books_from_google(query, max_results=10):
