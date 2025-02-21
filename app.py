@@ -35,11 +35,12 @@ def search_books():
     
     books_data = fetch_books_from_google(query)
     books = [{
-        "title": item["volumeInfo"].get("title"),
-        "author": item["volumeInfo"].get("authors", []),
-        "publisher": item["volumeInfo"].get("publisher"),
-        "category": item["volumeInfo"].get("categories", []),
-    } for item in books_data]
+    "title": item["volumeInfo"].get("title"),
+    "author": item["volumeInfo"].get("authors", []),  # Asegúrate de que authors sea una lista
+    "publisher": item["volumeInfo"].get("publisher"),
+    "category": item["volumeInfo"].get("categories", []),  # Asegúrate de que categories sea una lista
+} for item in books_data]
+
     
     return jsonify(books), 200
 
