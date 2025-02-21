@@ -16,7 +16,7 @@ app = Flask(__name__)
 CORS(app)
 
 
-# Tu API Key de Google Books
+# API Key de Google Books
 GOOGLE_BOOKS_API_KEY = os.getenv("AIzaSyCNaLXQirFNEXYFeAS8RTg8YbYe12Z2DNs")
 
 # Función para obtener libros desde Google Books API
@@ -68,11 +68,22 @@ def check_authenticated_user(token):
         return None  # Si el token no es válido o no está presente
 
 # Función para obtener todos los libros desde Firestore
-@app.route("/books", methods=["GET"])
-def get_books():
-    books_ref = db.collection("books").get()
-    books = [book.to_dict() for book in books_ref]
-    return jsonify(books), 200
+@app.route('/books', methods=['GET'])
+def get_all_books():
+    try:
+        books_ref = db.collection('books')
+        books = [doc.to_dict() for doc in books_ref.stream()]
+
+        # Si hay menos de 10 libros en la base de datos, buscar libros en Google Books
+        if len(books) < 10:
+            query = "technology"  # Puedes cambiar el tema
+            google_books = fetch_books_from_google(query, limit=10 - len(books))
+            books.extend(google_books)
+
+        return jsonify(books), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 # Endpoint para agregar un libro (solo admin)
 @app.route("/books", methods=["POST"])
@@ -131,8 +142,7 @@ def download_book(book_id):
         return jsonify({"error": "Libro no encontrado"}), 404
 
     book_data = book.to_dict()
-    # Aquí podrías agregar la lógica de descarga de un archivo, por ejemplo un PDF.
-    # Este ejemplo solo devuelve los datos del libro.
+    # agregar la lógica de descarga de un archivo, por ejemplo un PDF.
     return jsonify(book_data), 200
 
 # Iniciar el servidor
