@@ -7,11 +7,7 @@ import json
 import os
 from firebase_admin import auth
 
-# Lee el archivo serviceAccountKey.json directamente
-with open("serviceAccountKey.json") as f:
-    firebase_config = json.load(f)
-
-cred = credentials.Certificate(firebase_config)
+cred = credentials.Certificate("serviceAccountKey.json")
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
