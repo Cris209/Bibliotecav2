@@ -17,11 +17,11 @@ app = Flask(__name__)
 CORS(app)
 
 # API Key de Google Books
-GOOGLE_BOOKS_API_KEY = os.getenv("AIzaSyCNaLXQirFNEXYFeAS8RTg8YbYe12Z2DNs")
+GOOGLE_BOOKS_API_KEY = os.getenv("'AIzaSyCNaLXQirFNEXYFeAS8RTg8YbYe12Z2DNs")
 
 # Función para obtener libros desde Google Books API
 def fetch_books_from_google(query, max_results=10):
-    url = f"https://www.googleapis.com/books/v1/volumes?q={query}&maxResults={max_results}"
+    url = f"https://www.googleapis.com/books/v1/volumes?q={query}&maxResults={max_results}&key={GOOGLE_BOOKS_API_KEY}"
     response = requests.get(url)
     if response.status_code == 200:
         return response.json().get("items", [])
@@ -35,13 +35,14 @@ def search_books():
     
     books_data = fetch_books_from_google(query)
     books = [{
-    "title": item["volumeInfo"].get("title"),
-    "author": item["volumeInfo"].get("authors", []),  # Asegúrate de que authors sea una lista
-    "publisher": item["volumeInfo"].get("publisher"),
-    "category": item["volumeInfo"].get("categories", []),  # Asegúrate de que categories sea una lista
-} for item in books_data]
+        "title": item["volumeInfo"].get("title"),
+        "author": item["volumeInfo"].get("authors", []),  # Asegúrate de que authors sea una lista
+        "publisher": item["volumeInfo"].get("publisher"),
+        "category": item["volumeInfo"].get("categories", []),  # Asegúrate de que categories sea una lista
+        "description": item["volumeInfo"].get("description"),
+        "thumbnail": item["volumeInfo"].get("imageLinks", {}).get("thumbnail")
+    } for item in books_data]
 
-    
     return jsonify(books), 200
 
 # Función para verificar si el usuario está autenticado
