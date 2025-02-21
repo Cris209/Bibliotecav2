@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify;
+from flask_cors import CORS;
 import requests
 import firebase_admin
 from firebase_admin import firestore, credentials, auth
@@ -12,6 +13,8 @@ db = firestore.client()
 
 # Configurar Flask
 app = Flask(__name__)
+CORS(app)
+
 
 # Tu API Key de Google Books
 GOOGLE_BOOKS_API_KEY = os.getenv("AIzaSyCNaLXQirFNEXYFeAS8RTg8YbYe12Z2DNs")
