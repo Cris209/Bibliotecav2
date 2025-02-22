@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 # Cargar credenciales de Firebase desde variable de entorno render
 service_account_info = json.loads(os.getenv("SERVICE_ACCOUNT_KEY"))
-cred = credentials.Certificate('service_account_info')
+cred = credentials.Certificate(service_account_info)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
