@@ -95,7 +95,7 @@ def buscar_libros():
     return jsonify({"resultados": resultados})
 
 # Endpoint para mostrar 10 libros predeterminados
-@app.route('/api/mostrar_10_libros', methods=['GET'])
+@app.route('/api/libros', methods=['GET'])
 def mostrar_10_libros():
     params = {
         'q': 'fiction',
