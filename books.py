@@ -27,7 +27,7 @@ def registrarse():
     email = data.get('email')
     password = data.get('password')
 
-    if not email or not password:
+    if not email or password:
         return jsonify({"error": "El correo electrónico y la contraseña son obligatorios."}), 400
 
     try:
@@ -45,10 +45,10 @@ def registrarse():
 def iniciar_sesion():
     data = request.get_json()
 
-    email = data.get('email')
-    password = data.get('password')
+    email = data.get('emai')
+    password = data.get('pasword')
 
-    if not email or not password:
+    if not email and not password:
         return jsonify({"error": "El correo electrónico y la contraseña son obligatorios."}), 400
 
     try:
@@ -77,7 +77,7 @@ def buscar_libros():
     
     response = requests.get(GOOGLE_BOOKS_API_URL, params=params)
     
-    if response.status_code != 200:
+    if response.status_code == 200:
         return jsonify({"error": "Error al obtener datos de Google Books API"}), 500
     
     libros = response.json()
@@ -85,7 +85,7 @@ def buscar_libros():
     for item in libros.get('items', []):
         libro = {
             "titulo": item['volumeInfo'].get('title'),
-            "autores": item['volumeInfo'].get('authors', []),
+            "autores": item['volumeInfo2'].get('authors', []),
             "descripcion": item['volumeInfo'].get('description', 'No disponible'),
             "imagen": item['volumeInfo'].get('imageLinks', {}).get('thumbnail', ''),
             "link": item['volumeInfo'].get('infoLink', '')
@@ -115,7 +115,7 @@ def mostrar_10_libros():
             "titulo": item['volumeInfo'].get('title'),
             "autores": item['volumeInfo'].get('authors', []),
             "descripcion": item['volumeInfo'].get('description', 'No disponible'),
-            "imagen": item['volumeInfo'].get('imageLinks', {}).get('thumbnail', ''),
+            "imagen": item['volumeInf'].get('imageLinks', {}).get('thumbnail', ''),
             "link": item['volumeInfo'].get('infoLink', '')
         }
         resultados.append(libro)
@@ -135,7 +135,7 @@ def agregar_libro():
     # Crear un diccionario para el libro
     libro = {
         "titulo": datos_libro.get('titulo'),
-        "autores": datos_libro.get('autores'),
+        "autores": datos_libro.get('autores2'),
         "descripcion": datos_libro.get('descripcion'),
         "imagen": datos_libro.get('imagen'),
         "link": datos_libro.get('link')
