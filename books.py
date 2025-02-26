@@ -1,4 +1,5 @@
 from flask import Flask, jsonify, request
+from flask_cors import CORS  # Importa CORS
 import requests
 import firebase_admin
 from firebase_admin import credentials, firestore, auth
@@ -6,14 +7,12 @@ import json
 import os
 
 app = Flask(__name__)
+CORS(app)  # Habilita CORS para todas las rutas
 
 # Cargar credenciales de Firebase desde variable de entorno render
 service_account_info = json.loads(os.getenv("SERVICE_ACCOUNT_KEY"))
 cred = credentials.Certificate(service_account_info)
 firebase_admin.initialize_app(cred)
-db = firestore.client()
-
-# Obtener referencia a Firestore
 db = firestore.client()
 
 # Definir la URL base de Google Books API
@@ -55,7 +54,6 @@ def iniciar_sesion():
         # Verificar si el usuario existe y la contraseña es correcta
         user = auth.get_user_by_email(email)
         if user:
-            
             return jsonify({"mensaje": "Inicio de sesión exitoso", "uid": user.uid}), 200
         else:
             return jsonify({"error": "Usuario no encontrado"}), 404
@@ -125,6 +123,23 @@ def mostrar_10_libros():
 # Endpoint para agregar un libro a Firebase
 @app.route('/api/agregar_libro', methods=['POST'])
 def agregar_libro():
+    # Verificar si el usuario está autenticado y es un administrador
+    id_token = request.headers.get('Authorization')
+    if not id_token:
+        return jsonify({"error": "Token de autenticación requerido"}), 401
+
+    try:
+        # Verificar el token de Firebase
+        decoded_token = auth.verify_id_token(id_token)
+        user_id = decoded_token['uid']
+
+        # Verificar si el usuario es administrador
+        user = auth.get_user(user_id)
+        if user.custom_claims.get('role') != 'admin':
+            return jsonify({"error": "No tienes permisos para agregar libros"}), 403
+    except Exception as e:
+        return jsonify({"error": f"Error al verificar usuario: {str(e)}"}), 500
+
     # Obtener los datos del libro desde el cuerpo de la solicitud
     datos_libro = request.get_json()
 
@@ -147,10 +162,27 @@ def agregar_libro():
         return jsonify({"mensaje": "Libro agregado exitosamente"}), 201
     except Exception as e:
         return jsonify({"error": f"Error al agregar el libro: {str(e)}"}), 500
-    
+
 # Endpoint para eliminar un libro de Firebase
 @app.route('/api/eliminar_libro/<libro_id>', methods=['DELETE'])
 def eliminar_libro(libro_id):
+    # Verificar si el usuario está autenticado y es un administrador
+    id_token = request.headers.get('Authorization')
+    if not id_token:
+        return jsonify({"error": "Token de autenticación requerido"}), 401
+
+    try:
+        # Verificar el token de Firebase
+        decoded_token = auth.verify_id_token(id_token)
+        user_id = decoded_token['uid']
+
+        # Verificar si el usuario es administrador
+        user = auth.get_user(user_id)
+        if user.custom_claims.get('role') != 'admin':
+            return jsonify({"error": "No tienes permisos para eliminar libros"}), 403
+    except Exception as e:
+        return jsonify({"error": f"Error al verificar usuario: {str(e)}"}), 500
+
     # Buscar el libro por ID en Firestore
     libro_ref = db.collection('libros').document(libro_id)
 
@@ -166,7 +198,7 @@ def eliminar_libro(libro_id):
         return jsonify({"mensaje": "Libro eliminado exitosamente"}), 200
     except Exception as e:
         return jsonify({"error": f"Error al eliminar el libro: {str(e)}"}), 500
-    
+
 # Ejecutar la app en el servidor
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
