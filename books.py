@@ -128,41 +128,28 @@ def mostrar_10_libros():
     return jsonify({"resultados": resultados})
     
 # Endpoint para obtener detalles de un libro específico
-@app.route('/api/libros/<path:book_id>', methods=['GET'])
-def obtener_detalles_libro(book_id):
+# En tu archivo de backend (app.py)
+@app.route('/api/libros/<id>', methods=['GET'])
+def obtener_libro(id):
     try:
-        # Obtener detalles del libro de Open Library API
-        response = requests.get(f"{OPEN_LIBRARY_API_URL}{book_id}.json")
+        # URL correcta de Open Library API
+        open_library_url = f"https://openlibrary.org/works/{id}.json"
         
-        if response.status_code != 200:
-            return jsonify({"error": "Libro no encontrado"}), 404
+        response = requests.get(open_library_url)
+        response.raise_for_status()  # Lanza error si la solicitud falla
         
         libro_data = response.json()
         
-        # Obtener la imagen del libro
-        cover_id = libro_data.get('covers', [None])[0] if 'covers' in libro_data else None
-        imagen = f"{OPEN_LIBRARY_COVERS_URL}/id/{cover_id}-L.jpg" if cover_id else ''
-        
-        # Obtener información de los autores
-        autores = []
-        if 'authors' in libro_data:
-            for author in libro_data['authors']:
-                author_response = requests.get(f"{OPEN_LIBRARY_API_URL}{author['author']['key']}.json")
-                if author_response.status_code == 200:
-                    author_data = author_response.json()
-                    autores.append(author_data.get('name', 'Autor desconocido'))
-        
-        # Construir el objeto del libro con la información detallada
+        # Procesa los datos para tu estructura esperada
         libro = {
-            "titulo": libro_data.get('title', 'Título no disponible'),
-            "autores": autores,
-            "descripcion": libro_data.get('description', {}).get('value', 'No disponible'),
-            "imagen": imagen,
-            "link": f"{OPEN_LIBRARY_API_URL}{book_id}",
-            "editorial": libro_data.get('publishers', ['No disponible'])[0] if 'publishers' in libro_data else 'No disponible',
-            "anio_publicacion": libro_data.get('publish_date', 'No disponible'),
-            "isbn": libro_data.get('isbn_13', [None])[0] if 'isbn_13' in libro_data else libro_data.get('isbn_10', [None])[0] if 'isbn_10' in libro_data else 'No disponible',
-            "categorias": libro_data.get('subjects', [])[:5] if 'subjects' in libro_data else []
+            "id": id,
+            "titulo": libro_data.get("title", "Título no disponible"),
+            "autores": [autor.get("author", {}).get("key", "Autor desconocido") 
+                       for autor in libro_data.get("authors", [])],
+            "descripcion": libro_data.get("description", "Descripción no disponible"),
+            "imagen": f"https://covers.openlibrary.org/b/olid/{id}-M.jpg",
+            "fecha_publicacion": libro_data.get("first_publish_date", ""),
+            "link": f"https://openlibrary.org/works/{id}"
         }
         
         return jsonify(libro)
