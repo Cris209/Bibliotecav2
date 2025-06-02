@@ -126,7 +126,50 @@ def mostrar_10_libros():
         resultados.append(libro)
 
     return jsonify({"resultados": resultados})
-
+    
+# Endpoint para obtener detalles de un libro específico
+@app.route('/api/libros/<path:book_id>', methods=['GET'])
+def obtener_detalles_libro(book_id):
+    try:
+        # Obtener detalles del libro de Open Library API
+        response = requests.get(f"{OPEN_LIBRARY_API_URL}{book_id}.json")
+        
+        if response.status_code != 200:
+            return jsonify({"error": "Libro no encontrado"}), 404
+        
+        libro_data = response.json()
+        
+        # Obtener la imagen del libro
+        cover_id = libro_data.get('covers', [None])[0] if 'covers' in libro_data else None
+        imagen = f"{OPEN_LIBRARY_COVERS_URL}/id/{cover_id}-L.jpg" if cover_id else ''
+        
+        # Obtener información de los autores
+        autores = []
+        if 'authors' in libro_data:
+            for author in libro_data['authors']:
+                author_response = requests.get(f"{OPEN_LIBRARY_API_URL}{author['author']['key']}.json")
+                if author_response.status_code == 200:
+                    author_data = author_response.json()
+                    autores.append(author_data.get('name', 'Autor desconocido'))
+        
+        # Construir el objeto del libro con la información detallada
+        libro = {
+            "titulo": libro_data.get('title', 'Título no disponible'),
+            "autores": autores,
+            "descripcion": libro_data.get('description', {}).get('value', 'No disponible'),
+            "imagen": imagen,
+            "link": f"{OPEN_LIBRARY_API_URL}{book_id}",
+            "editorial": libro_data.get('publishers', ['No disponible'])[0] if 'publishers' in libro_data else 'No disponible',
+            "anio_publicacion": libro_data.get('publish_date', 'No disponible'),
+            "isbn": libro_data.get('isbn_13', [None])[0] if 'isbn_13' in libro_data else libro_data.get('isbn_10', [None])[0] if 'isbn_10' in libro_data else 'No disponible',
+            "categorias": libro_data.get('subjects', [])[:5] if 'subjects' in libro_data else []
+        }
+        
+        return jsonify(libro)
+        
+    except Exception as e:
+        return jsonify({"error": f"Error al obtener detalles del libro: {str(e)}"}), 500
+        
 # Ejecutar la app en el servidor
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
