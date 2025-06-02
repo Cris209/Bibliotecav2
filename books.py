@@ -1,5 +1,5 @@
 from flask import Flask, jsonify, request
-from flask_cors import CORS  # Importa CORS
+from flask_cors import CORS
 import requests
 import firebase_admin
 from firebase_admin import credentials, firestore, auth
@@ -7,7 +7,7 @@ import json
 import os
 
 app = Flask(__name__)
-CORS(app)  # Habilita CORS para todas las rutas
+CORS(app)
 
 # Cargar credenciales de Firebase desde variable de entorno render
 service_account_info = json.loads(os.getenv("SERVICE_ACCOUNT_KEY"))
@@ -15,8 +15,9 @@ cred = credentials.Certificate(service_account_info)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# Definir la URL base de Google Books API
-GOOGLE_BOOKS_API_URL = "https://www.googleapis.com/books/v1/volumes"
+# Definir la URL base de Open Library API
+OPEN_LIBRARY_API_URL = "https://openlibrary.org"
+OPEN_LIBRARY_COVERS_URL = "https://covers.openlibrary.org/b"
 
 # Endpoint para registrar un nuevo usuario
 @app.route('/api/registrarse', methods=['POST'])
@@ -30,7 +31,6 @@ def registrarse():
         return jsonify({"error": "El correo electrónico y la contraseña son obligatorios."}), 400
 
     try:
-        # Crear usuario con correo electrónico y contraseña
         user = auth.create_user(
             email=email,
             password=password
@@ -51,7 +51,6 @@ def iniciar_sesion():
         return jsonify({"error": "El correo electrónico y la contraseña son obligatorios."}), 400
 
     try:
-        # Verificar si el usuario existe y la contraseña es correcta
         user = auth.get_user_by_email(email)
         if user:
             return jsonify({"mensaje": "Inicio de sesión exitoso", "uid": user.uid}), 200
@@ -69,24 +68,28 @@ def buscar_libros():
     
     params = {
         'q': query,
-        'maxResults': 10,
-        'langRestrict': 'es'
+        'limit': 10,
+        'language': 'spa'  # Filtro para libros en español
     }
     
-    response = requests.get(GOOGLE_BOOKS_API_URL, params=params)
+    response = requests.get(f"{OPEN_LIBRARY_API_URL}/search.json", params=params)
     
     if response.status_code != 200:
-        return jsonify({"error": "Error al obtener datos de Google Books API"}), 500
+        return jsonify({"error": "Error al obtener datos de Open Library API"}), 500
     
     libros = response.json()
     resultados = []
-    for item in libros.get('items', []):
+    for doc in libros.get('docs', []):
+        cover_id = doc.get('cover_i')
+        imagen = f"{OPEN_LIBRARY_COVERS_URL}/id/{cover_id}-M.jpg" if cover_id else ''
+        
         libro = {
-            "titulo": item['volumeInfo'].get('title'),
-            "autores": item['volumeInfo'].get('authors', []),
-            "descripcion": item['volumeInfo'].get('description', 'No disponible'),
-            "imagen": item['volumeInfo'].get('imageLinks', {}).get('thumbnail', ''),
-            "link": item['volumeInfo'].get('infoLink', '')
+            "titulo": doc.get('title', 'Título no disponible'),
+            "autores": doc.get('author_name', []),
+            "descripcion": doc.get('first_sentence', ['No disponible'])[0] if 'first_sentence' in doc else 'No disponible',
+            "imagen": imagen,
+            "link": f"{OPEN_LIBRARY_API_URL}{doc.get('key', '')}" if 'key' in doc else '',
+            "disponible_para_descarga": 'ia' in doc  # Indica si está disponible para descarga
         }
         resultados.append(libro)
 
@@ -97,107 +100,32 @@ def buscar_libros():
 def mostrar_10_libros():
     params = {
         'q': 'fiction',
-        'maxResults': 10,
-        'langRestrict': 'es'
+        'limit': 10,
+        'language': 'spa'  # Filtro para libros en español
     }
 
-    response = requests.get(GOOGLE_BOOKS_API_URL, params=params)
+    response = requests.get(f"{OPEN_LIBRARY_API_URL}/search.json", params=params)
 
     if response.status_code != 200:
-        return jsonify({"error": "Error al obtener datos de Google Books API"}), 500
+        return jsonify({"error": "Error al obtener datos de Open Library API"}), 500
 
     libros = response.json()
     resultados = []
-    for item in libros.get('items', []):
+    for doc in libros.get('docs', []):
+        cover_id = doc.get('cover_i')
+        imagen = f"{OPEN_LIBRARY_COVERS_URL}/id/{cover_id}-M.jpg" if cover_id else ''
+        
         libro = {
-            "titulo": item['volumeInfo'].get('title'),
-            "autores": item['volumeInfo'].get('authors', []),
-            "descripcion": item['volumeInfo'].get('description', 'No disponible'),
-            "imagen": item['volumeInfo'].get('imageLinks', {}).get('thumbnail', ''),
-            "link": item['volumeInfo'].get('infoLink', '')
+            "titulo": doc.get('title', 'Título no disponible'),
+            "autores": doc.get('author_name', []),
+            "descripcion": doc.get('first_sentence', ['No disponible'])[0] if 'first_sentence' in doc else 'No disponible',
+            "imagen": imagen,
+            "link": f"{OPEN_LIBRARY_API_URL}{doc.get('key', '')}" if 'key' in doc else '',
+            "disponible_para_descarga": 'ia' in doc  # Indica si está disponible para descarga
         }
         resultados.append(libro)
 
     return jsonify({"resultados": resultados})
-
-# Endpoint para agregar un libro a Firebase
-@app.route('/api/agregar_libro', methods=['POST'])
-def agregar_libro():
-    # Verificar si el usuario está autenticado y es un administrador
-    id_token = request.headers.get('Authorization')
-    if not id_token:
-        return jsonify({"error": "Token de autenticación requerido"}), 401
-
-    try:
-        # Verificar el token de Firebase
-        decoded_token = auth.verify_id_token(id_token)
-        user_id = decoded_token['uid']
-
-        # Verificar si el usuario es administrador
-        user = auth.get_user(user_id)
-        if user.custom_claims.get('role') != 'admin':
-            return jsonify({"error": "No tienes permisos para agregar libros"}), 403
-    except Exception as e:
-        return jsonify({"error": f"Error al verificar usuario: {str(e)}"}), 500
-
-    # Obtener los datos del libro desde el cuerpo de la solicitud
-    datos_libro = request.get_json()
-
-    # Validar que todos los campos necesarios estén presentes
-    if not datos_libro.get('titulo') or not datos_libro.get('autores') or not datos_libro.get('descripcion') or not datos_libro.get('imagen') or not datos_libro.get('link'):
-        return jsonify({"error": "Faltan datos necesarios para agregar el libro"}), 400
-
-    # Crear un diccionario para el libro
-    libro = {
-        "titulo": datos_libro.get('titulo'),
-        "autores": datos_libro.get('autores'),
-        "descripcion": datos_libro.get('descripcion'),
-        "imagen": datos_libro.get('imagen'),
-        "link": datos_libro.get('link')
-    }
-
-    # Agregar el libro a Firestore en la colección "libros"
-    try:
-        db.collection('libros').add(libro)
-        return jsonify({"mensaje": "Libro agregado exitosamente"}), 201
-    except Exception as e:
-        return jsonify({"error": f"Error al agregar el libro: {str(e)}"}), 500
-
-# Endpoint para eliminar un libro de Firebase
-@app.route('/api/eliminar_libro/<libro_id>', methods=['DELETE'])
-def eliminar_libro(libro_id):
-    # Verificar si el usuario está autenticado y es un administrador
-    id_token = request.headers.get('Authorization')
-    if not id_token:
-        return jsonify({"error": "Token de autenticación requerido"}), 401
-
-    try:
-        # Verificar el token de Firebase
-        decoded_token = auth.verify_id_token(id_token)
-        user_id = decoded_token['uid']
-
-        # Verificar si el usuario es administrador
-        user = auth.get_user(user_id)
-        if user.custom_claims.get('role') != 'admin':
-            return jsonify({"error": "No tienes permisos para eliminar libros"}), 403
-    except Exception as e:
-        return jsonify({"error": f"Error al verificar usuario: {str(e)}"}), 500
-
-    # Buscar el libro por ID en Firestore
-    libro_ref = db.collection('libros').document(libro_id)
-
-    # Verificar si el libro existe
-    libro = libro_ref.get()
-
-    if not libro.exists:
-        return jsonify({"error": "Libro no encontrado"}), 404
-
-    try:
-        # Eliminar el libro de Firestore
-        libro_ref.delete()
-        return jsonify({"mensaje": "Libro eliminado exitosamente"}), 200
-    except Exception as e:
-        return jsonify({"error": f"Error al eliminar el libro: {str(e)}"}), 500
 
 # Ejecutar la app en el servidor
 if __name__ == '__main__':
