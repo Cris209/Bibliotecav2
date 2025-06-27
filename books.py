@@ -11,6 +11,10 @@ from threading import Lock
 app = Flask(__name__)
 CORS(app)
 
+# Definir la URL base de Open Library API
+OPEN_LIBRARY_API_URL = "https://openlibrary.org"
+OPEN_LIBRARY_COVERS_URL = "https://covers.openlibrary.org/b"
+
 # -----------------------------
 # PATRÓN SINGLETON: FirebaseManager
 # -----------------------------
