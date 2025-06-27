@@ -5,45 +5,107 @@ import firebase_admin
 from firebase_admin import credentials, firestore, auth
 import json
 import os
+import bcrypt
+from threading import Lock
 
 app = Flask(__name__)
 CORS(app)
 
-# Cargar credenciales de Firebase desde variable de entorno render
-service_account_info = json.loads(os.getenv("SERVICE_ACCOUNT_KEY"))
-cred = credentials.Certificate(service_account_info)
-firebase_admin.initialize_app(cred)
-db = firestore.client()
+# -----------------------------
+# PATRÓN SINGLETON: FirebaseManager
+# -----------------------------
+class FirebaseManager:
+    _instance = None
+    _lock = Lock()
 
-# Definir la URL base de Open Library API
-OPEN_LIBRARY_API_URL = "https://openlibrary.org"
-OPEN_LIBRARY_COVERS_URL = "https://covers.openlibrary.org/b"
+    def __new__(cls):
+        with cls._lock:
+            if cls._instance is None:
+                service_account_info = json.loads(os.getenv("SERVICE_ACCOUNT_KEY"))
+                cred = credentials.Certificate(service_account_info)
+                firebase_admin.initialize_app(cred)
+                cls._instance = super().__new__(cls)
+                cls._instance.db = firestore.client()
+        return cls._instance
 
-# Endpoint para registrar un nuevo usuario
+# Inicializa Firebase (singleton)
+firebase_manager = FirebaseManager()
+db = firebase_manager.db
+
+# -----------------------------
+# PATRÓN FACTORY METHOD: UserFactory
+# -----------------------------
+class Usuario:
+    def __init__(self, email, password):
+        self.email = email
+        self.password = password
+
+class UsuarioAdmin(Usuario):
+    def __init__(self, email, password):
+        super().__init__(email, password)
+        self.rol = "admin"
+
+class UsuarioNormal(Usuario):
+    def __init__(self, email, password):
+        super().__init__(email, password)
+        self.rol = "normal"
+
+class UserFactory:
+    @staticmethod
+    def crear_usuario(tipo, email, password):
+        if tipo == "admin":
+            return UsuarioAdmin(email, password)
+        return UsuarioNormal(email, password)
+
+# -----------------------------
+# Encriptación: bcrypt
+# -----------------------------
+def encriptar_contraseña(password):
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+# -----------------------------
+# RUTAS
+# -----------------------------
 @app.route('/api/registrarse', methods=['POST'])
 def registrarse():
     data = request.get_json()
 
-    email = data.get('email')
+    nombre = data.get('nombre')
+    apellido = data.get('apellido')
+    gmail = data.get('gmail')
     password = data.get('password')
+    tipo_usuario = data.get('tipo', 'normal')
 
-    if not email or not password:
-        return jsonify({"error": "El correo electrónico y la contraseña son obligatorios."}), 400
+    # Validación de campos
+    if not nombre or not apellido or not gmail or not password:
+        return jsonify({"error": "Todos los campos son obligatorios."}), 400
+
+    if not gmail.endswith("@gmail.com"):
+        return jsonify({"error": "El correo debe ser un Gmail válido (ejemplo@gmail.com)."}), 400
 
     try:
-        user = auth.create_user(
-            email=email,
-            password=password
-        )
+        usuario = UserFactory.crear_usuario(tipo_usuario, gmail, password)
+        password_encriptada = encriptar_contraseña(usuario.password)
+
+        user = auth.create_user(email=usuario.email, password=usuario.password)
+
+        # Guardar datos adicionales en Firestore
+        db.collection("usuarios").document(user.uid).set({
+            "nombre": nombre,
+            "apellido": apellido,
+            "email": usuario.email,
+            "rol": usuario.rol,
+            "password_encriptada": password_encriptada
+        })
+
         return jsonify({"mensaje": "Usuario registrado exitosamente", "uid": user.uid}), 201
     except Exception as e:
         return jsonify({"error": f"Error al registrar usuario: {str(e)}"}), 500
 
-# Endpoint para iniciar sesión (autenticación)
+
 @app.route('/api/iniciar_sesion', methods=['POST'])
 def iniciar_sesion():
     data = request.get_json()
-
     email = data.get('email')
     password = data.get('password')
 
