@@ -11,9 +11,9 @@ from threading import Lock
 app = Flask(__name__)
 CORS(app)
 
-# Definir la URL base de Open Library API
-OPEN_LIBRARY_API_URL = "https://openlibrary.org"
-OPEN_LIBRARY_COVERS_URL = "https://covers.openlibrary.org/b"
+# Configuración de Google Books API
+GOOGLE_BOOKS_API_URL = "https://www.googleapis.com/books/v1"
+GOOGLE_BOOKS_API_KEY = os.getenv("GOOGLE_BOOKS_API_KEY")  # Asegúrate de configurar esta variable de entorno
 
 # -----------------------------
 # PATRÓN SINGLETON: FirebaseManager
@@ -134,28 +134,31 @@ def buscar_libros():
     
     params = {
         'q': query,
-        'limit': 10,
-        'language': 'spa'  # Filtro para libros en español
+        'maxResults': 10,
+        'langRestrict': 'es',  # Filtro para libros en español
+        'key': GOOGLE_BOOKS_API_KEY
     }
     
-    response = requests.get(f"{OPEN_LIBRARY_API_URL}/search.json", params=params)
+    response = requests.get(f"{GOOGLE_BOOKS_API_URL}/volumes", params=params)
     
     if response.status_code != 200:
-        return jsonify({"error": "Error al obtener datos de Open Library API"}), 500
+        return jsonify({"error": "Error al obtener datos de Google Books API"}), 500
     
     libros = response.json()
     resultados = []
-    for doc in libros.get('docs', []):
-        cover_id = doc.get('cover_i')
-        imagen = f"{OPEN_LIBRARY_COVERS_URL}/id/{cover_id}-M.jpg" if cover_id else ''
+    for item in libros.get('items', []):
+        volume_info = item.get('volumeInfo', {})
+        imagen = volume_info.get('imageLinks', {}).get('thumbnail', '').replace('http://', 'https://') if 'imageLinks' in volume_info else ''
         
         libro = {
-            "titulo": doc.get('title', 'Título no disponible'),
-            "autores": doc.get('author_name', []),
-            "descripcion": doc.get('first_sentence', ['No disponible'])[0] if 'first_sentence' in doc else 'No disponible',
+            "id": item.get('id', ''),
+            "titulo": volume_info.get('title', 'Título no disponible'),
+            "autores": volume_info.get('authors', []),
+            "descripcion": volume_info.get('description', 'No disponible'),
             "imagen": imagen,
-            "link": f"{OPEN_LIBRARY_API_URL}{doc.get('key', '')}" if 'key' in doc else '',
-            "disponible_para_descarga": 'ia' in doc  # Indica si está disponible para descarga
+            "link": volume_info.get('infoLink', ''),
+            "disponible_para_descarga": 'pdf' in item.get('accessInfo', {}).get('epub', {}).get('downloadLink', '') or 
+                                      'pdf' in item.get('accessInfo', {}).get('pdf', {}).get('downloadLink', '')
         }
         resultados.append(libro)
 
@@ -166,56 +169,70 @@ def buscar_libros():
 def mostrar_10_libros():
     params = {
         'q': 'fiction',
-        'limit': 10,
-        'language': 'spa'  # Filtro para libros en español
+        'maxResults': 10,
+        'langRestrict': 'es',  # Filtro para libros en español
+        'key': GOOGLE_BOOKS_API_KEY
     }
 
-    response = requests.get(f"{OPEN_LIBRARY_API_URL}/search.json", params=params)
+    response = requests.get(f"{GOOGLE_BOOKS_API_URL}/volumes", params=params)
 
     if response.status_code != 200:
-        return jsonify({"error": "Error al obtener datos de Open Library API"}), 500
+        return jsonify({"error": "Error al obtener datos de Google Books API"}), 500
 
     libros = response.json()
     resultados = []
-    for doc in libros.get('docs', []):
-        cover_id = doc.get('cover_i')
-        imagen = f"{OPEN_LIBRARY_COVERS_URL}/id/{cover_id}-M.jpg" if cover_id else ''
+    for item in libros.get('items', []):
+        volume_info = item.get('volumeInfo', {})
+        imagen = volume_info.get('imageLinks', {}).get('thumbnail', '').replace('http://', 'https://') if 'imageLinks' in volume_info else ''
         
         libro = {
-            "titulo": doc.get('title', 'Título no disponible'),
-            "autores": doc.get('author_name', []),
-            "descripcion": doc.get('first_sentence', ['No disponible'])[0] if 'first_sentence' in doc else 'No disponible',
+            "id": item.get('id', ''),
+            "titulo": volume_info.get('title', 'Título no disponible'),
+            "autores": volume_info.get('authors', []),
+            "descripcion": volume_info.get('description', 'No disponible'),
             "imagen": imagen,
-            "link": f"{OPEN_LIBRARY_API_URL}{doc.get('key', '')}" if 'key' in doc else '',
-            "disponible_para_descarga": 'ia' in doc  # Indica si está disponible para descarga
+            "link": volume_info.get('infoLink', ''),
+            "disponible_para_descarga": 'pdf' in item.get('accessInfo', {}).get('epub', {}).get('downloadLink', '') or 
+                                      'pdf' in item.get('accessInfo', {}).get('pdf', {}).get('downloadLink', '')
         }
         resultados.append(libro)
 
     return jsonify({"resultados": resultados})
     
 # Endpoint para obtener detalles de un libro específico
-# En tu archivo de backend (app.py)
 @app.route('/api/libros/<id>', methods=['GET'])
 def obtener_libro(id):
     try:
-        # URL correcta de Open Library API
-        open_library_url = f"https://openlibrary.org/works/{id}.json"
+        response = requests.get(f"{GOOGLE_BOOKS_API_URL}/volumes/{id}?key={GOOGLE_BOOKS_API_KEY}")
+        response.raise_for_status()
         
-        response = requests.get(open_library_url)
-        response.raise_for_status()  # Lanza error si la solicitud falla
+        item = response.json()
+        volume_info = item.get('volumeInfo', {})
+        access_info = item.get('accessInfo', {})
         
-        libro_data = response.json()
+        # Procesar información de la imagen
+        image_links = volume_info.get('imageLinks', {})
+        imagen = image_links.get('thumbnail', '').replace('http://', 'https://')
+        if not imagen and 'smallThumbnail' in image_links:
+            imagen = image_links['smallThumbnail'].replace('http://', 'https://')
         
-        # Procesa los datos para tu estructura esperada
         libro = {
             "id": id,
-            "titulo": libro_data.get("title", "Título no disponible"),
-            "autores": [autor.get("author", {}).get("key", "Autor desconocido") 
-                       for autor in libro_data.get("authors", [])],
-            "descripcion": libro_data.get("description", "Descripción no disponible"),
-            "imagen": f"https://covers.openlibrary.org/b/olid/{id}-M.jpg",
-            "fecha_publicacion": libro_data.get("first_publish_date", ""),
-            "link": f"https://openlibrary.org/works/{id}"
+            "titulo": volume_info.get('title', 'Título no disponible'),
+            "autores": volume_info.get('authors', []),
+            "descripcion": volume_info.get('description', 'Descripción no disponible'),
+            "imagen": imagen,
+            "fecha_publicacion": volume_info.get('publishedDate', ''),
+            "editorial": volume_info.get('publisher', ''),
+            "paginas": volume_info.get('pageCount', 0),
+            "categorias": volume_info.get('categories', []),
+            "link": volume_info.get('infoLink', ''),
+            "disponible_para_descarga": access_info.get('pdf', {}).get('isAvailable', False) or 
+                                        access_info.get('epub', {}).get('isAvailable', False),
+            "download_links": {
+                "pdf": access_info.get('pdf', {}).get('downloadLink', ''),
+                "epub": access_info.get('epub', {}).get('downloadLink', '')
+            }
         }
         
         return jsonify(libro)
@@ -226,42 +243,30 @@ def obtener_libro(id):
 @app.route('/api/libros/<id>/disponibilidad', methods=['GET'])
 def verificar_disponibilidad_descarga(id):
     try:
-        # Primero obtenemos la obra principal
-        work_url = f"{OPEN_LIBRARY_API_URL}/works/{id}.json"
-        work_response = requests.get(work_url)
+        response = requests.get(f"{GOOGLE_BOOKS_API_URL}/volumes/{id}?key={GOOGLE_BOOKS_API_KEY}")
+        response.raise_for_status()
         
-        if work_response.status_code != 200:
-            return jsonify({"disponible": False, "mensaje": "Libro no encontrado"}), 404
+        item = response.json()
+        access_info = item.get('accessInfo', {})
         
-        work_data = work_response.json()
+        pdf_available = access_info.get('pdf', {}).get('isAvailable', False)
+        epub_available = access_info.get('epub', {}).get('isAvailable', False)
         
-        # Verificamos disponibilidad en la obra principal
-        if work_data.get('ia'):
+        disponible = pdf_available or epub_available
+        
+        if disponible:
             return jsonify({
                 "disponible": True,
-                "ia_id": work_data['ia'],
+                "formato": "PDF" if pdf_available else "EPUB",
+                "download_link": access_info.get('pdf', {}).get('downloadLink', '') if pdf_available else 
+                               access_info.get('epub', {}).get('downloadLink', ''),
                 "mensaje": "Disponible para descarga"
             })
-        
-        # Si no está en la obra principal, buscamos en las ediciones
-        editions_url = f"{OPEN_LIBRARY_API_URL}/works/{id}/editions.json"
-        editions_response = requests.get(editions_url)
-        
-        if editions_response.status_code == 200:
-            editions_data = editions_response.json()
-            for edition in editions_data.get('entries', []):
-                if edition.get('ia'):
-                    return jsonify({
-                        "disponible": True,
-                        "ia_id": edition['ia'],
-                        "mensaje": "Disponible para descarga"
-                    })
-        
-        # Si no encontramos en ninguna parte
-        return jsonify({
-            "disponible": False,
-            "mensaje": "Este libro no está disponible para descarga"
-        })
+        else:
+            return jsonify({
+                "disponible": False,
+                "mensaje": "Este libro no está disponible para descarga"
+            })
         
     except Exception as e:
         return jsonify({
