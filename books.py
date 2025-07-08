@@ -223,63 +223,51 @@ def obtener_libro(id):
     except Exception as e:
         return jsonify({"error": f"Error al obtener detalles del libro: {str(e)}"}), 500
 
-# Endpoint para obtener enlace de descarga de un libro específico
-@app.route('/api/libros/<id>/descargar', methods=['GET'])
-def obtener_enlace_descarga(id):
+@app.route('/api/libros/<id>/disponibilidad', methods=['GET'])
+def verificar_disponibilidad_descarga(id):
     try:
-        # Primero verificamos si el libro está disponible para descarga
+        # Primero obtenemos la obra principal
         work_url = f"{OPEN_LIBRARY_API_URL}/works/{id}.json"
         work_response = requests.get(work_url)
         
         if work_response.status_code != 200:
-            return jsonify({"error": "Libro no encontrado"}), 404
-            
+            return jsonify({"disponible": False, "mensaje": "Libro no encontrado"}), 404
+        
         work_data = work_response.json()
         
-        # Buscamos identificadores de archivo (IA) para descarga
-        ia_ids = []
-        if 'ia' in work_data:
-            ia_ids.append(work_data['ia'])
+        # Verificamos disponibilidad en la obra principal
+        if work_data.get('ia'):
+            return jsonify({
+                "disponible": True,
+                "ia_id": work_data['ia'],
+                "mensaje": "Disponible para descarga"
+            })
         
-        # También verificamos en las ediciones
+        # Si no está en la obra principal, buscamos en las ediciones
         editions_url = f"{OPEN_LIBRARY_API_URL}/works/{id}/editions.json"
         editions_response = requests.get(editions_url)
         
         if editions_response.status_code == 200:
             editions_data = editions_response.json()
             for edition in editions_data.get('entries', []):
-                if 'ia' in edition:
-                    ia_ids.append(edition['ia'])
+                if edition.get('ia'):
+                    return jsonify({
+                        "disponible": True,
+                        "ia_id": edition['ia'],
+                        "mensaje": "Disponible para descarga"
+                    })
         
-        # Eliminamos duplicados
-        ia_ids = list(set(ia_ids))
-        
-        if not ia_ids:
-            return jsonify({"error": "Este libro no está disponible para descarga"}), 404
-        
-        # Generamos los enlaces de descarga
-        enlaces = []
-        for ia_id in ia_ids:
-            # Formato común para libros en Internet Archive
-            enlaces.append({
-                "formato": "PDF",
-                "url": f"https://archive.org/download/{ia_id}/{ia_id}.pdf",
-                "tipo": "pdf"
-            })
-            enlaces.append({
-                "formato": "EPUB",
-                "url": f"https://archive.org/download/{ia_id}/{ia_id}.epub",
-                "tipo": "epub"
-            })
-        
+        # Si no encontramos en ninguna parte
         return jsonify({
-            "titulo": work_data.get("title", "Título no disponible"),
-            "disponible": True,
-            "enlaces": enlaces
+            "disponible": False,
+            "mensaje": "Este libro no está disponible para descarga"
         })
         
     except Exception as e:
-        return jsonify({"error": f"Error al obtener enlace de descarga: {str(e)}"}), 500
+        return jsonify({
+            "error": f"Error al verificar disponibilidad: {str(e)}",
+            "disponible": False
+        }), 500
 
 # Ejecutar la app en el servidor
 if __name__ == '__main__':
