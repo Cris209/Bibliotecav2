@@ -13,7 +13,7 @@ CORS(app)
 
 # Configuración de Google Books API
 GOOGLE_BOOKS_API_URL = "https://www.googleapis.com/books/v1"
-GOOGLE_BOOKS_API_KEY = os.getenv("GOOGLE_BOOKS_API_KEY")  # Asegúrate de configurar esta variable de entorno
+GOOGLE_BOOKS_API_KEY = os.getenv("AIzaSyCU0R6VMZm6AuPHQxF0Gx4Uz2AGOi-NV4I")  # Asegúrate de configurar esta variable de entorno
 
 # -----------------------------
 # PATRÓN SINGLETON: FirebaseManager
