@@ -222,7 +222,65 @@ def obtener_libro(id):
         
     except Exception as e:
         return jsonify({"error": f"Error al obtener detalles del libro: {str(e)}"}), 500
+
+# Endpoint para obtener enlace de descarga de un libro específico
+@app.route('/api/libros/<id>/descargar', methods=['GET'])
+def obtener_enlace_descarga(id):
+    try:
+        # Primero verificamos si el libro está disponible para descarga
+        work_url = f"{OPEN_LIBRARY_API_URL}/works/{id}.json"
+        work_response = requests.get(work_url)
         
+        if work_response.status_code != 200:
+            return jsonify({"error": "Libro no encontrado"}), 404
+            
+        work_data = work_response.json()
+        
+        # Buscamos identificadores de archivo (IA) para descarga
+        ia_ids = []
+        if 'ia' in work_data:
+            ia_ids.append(work_data['ia'])
+        
+        # También verificamos en las ediciones
+        editions_url = f"{OPEN_LIBRARY_API_URL}/works/{id}/editions.json"
+        editions_response = requests.get(editions_url)
+        
+        if editions_response.status_code == 200:
+            editions_data = editions_response.json()
+            for edition in editions_data.get('entries', []):
+                if 'ia' in edition:
+                    ia_ids.append(edition['ia'])
+        
+        # Eliminamos duplicados
+        ia_ids = list(set(ia_ids))
+        
+        if not ia_ids:
+            return jsonify({"error": "Este libro no está disponible para descarga"}), 404
+        
+        # Generamos los enlaces de descarga
+        enlaces = []
+        for ia_id in ia_ids:
+            # Formato común para libros en Internet Archive
+            enlaces.append({
+                "formato": "PDF",
+                "url": f"https://archive.org/download/{ia_id}/{ia_id}.pdf",
+                "tipo": "pdf"
+            })
+            enlaces.append({
+                "formato": "EPUB",
+                "url": f"https://archive.org/download/{ia_id}/{ia_id}.epub",
+                "tipo": "epub"
+            })
+        
+        return jsonify({
+            "titulo": work_data.get("title", "Título no disponible"),
+            "disponible": True,
+            "enlaces": enlaces
+        })
+        
+    except Exception as e:
+        return jsonify({"error": f"Error al obtener enlace de descarga: {str(e)}"}), 500
+
 # Ejecutar la app en el servidor
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
