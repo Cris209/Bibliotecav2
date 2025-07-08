@@ -182,7 +182,6 @@ def mostrar_10_libros():
         imagen = f"{OPEN_LIBRARY_COVERS_URL}/id/{cover_id}-M.jpg" if cover_id else ''
         
         libro = {
-            "id": id,
             "titulo": doc.get('title', 'Título no disponible'),
             "autores": doc.get('author_name', []),
             "descripcion": doc.get('first_sentence', ['No disponible'])[0] if 'first_sentence' in doc else 'No disponible',
