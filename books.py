@@ -155,7 +155,7 @@ def buscar_libros():
         retail_price = sale_info.get('retailPrice', {})
 
         precio = f"{retail_price.get('amount', 'No disponible')} {retail_price.get('currencyCode', '')}" \
-        if sale_info.get('saleability') == 'FOR SALE' else "No disponible"
+        if sale_info.get('saleability') == 'FOR_SALE' else "No disponible"
         
         libro = {
             "id": item.get('id', ''),
@@ -196,7 +196,7 @@ def mostrar_10_libros():
         retail_price = sale_info.get('retailPrice', {})
 
         precio = f"{retail_price.get('amount', 'No disponible')} {retail_price.get('currencyCode', '')}" \
-        if sale_info.get('saleability') == 'FOR SALE' else "No disponible"
+        if sale_info.get('saleability') == 'FOR_SALE' else "No disponible"
         
         libro = {
             "id": item.get('id', ''),
@@ -228,7 +228,7 @@ def obtener_libro(id):
         retail_price = sale_info.get('retailPrice', {})
 
         precio = f"{retail_price.get('amount', 'No disponible')} {retail_price.get('currencyCode', '')}" \
-        if sale_info.get('saleability') == 'FOR SALE' else "No disponible"
+        if sale_info.get('saleability') == 'FOR_SALE' else "No disponible"
         
         # Procesar información de la imagen
         image_links = volume_info.get('imageLinks', {})
