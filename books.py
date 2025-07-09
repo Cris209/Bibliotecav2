@@ -108,7 +108,6 @@ def registrarse():
     except Exception as e:
         return jsonify({"error": f"Error al registrar usuario: {str(e)}"}), 500
 
-
 @app.route('/api/iniciar_sesion', methods=['POST'])
 def iniciar_sesion():
     data = request.get_json()
@@ -126,6 +125,18 @@ def iniciar_sesion():
             return jsonify({"error": "Usuario no encontrado"}), 404
     except Exception as e:
         return jsonify({"error": f"Error al iniciar sesión: {str(e)}"}), 500
+
+@app.route('/api/usuario/<uid>', methods=['GET'])
+def obtener_usuario(uid):
+    try:
+        user_doc = db.collection("usuarios").document(uid).get()
+        if user_doc.exists:
+            user_data = user_doc.to_dict()
+            return jsonify(user_data), 200
+        else:
+            return jsonify({"error": "Usuario no encontrado"}), 404
+    except Exception as e:
+        return jsonify({"error": f"Error al obtener datos del usuario: {str(e)}"}), 500
 
 # Endpoint para buscar libros con un término específico
 @app.route('/api/buscar_libros', methods=['GET'])
@@ -318,6 +329,57 @@ def verificar_disponibilidad_descarga(id):
             "error": f"Error al verificar disponibilidad: {str(e)}",
             "disponible": False
         }), 500
+
+# -----------------------------
+# ADMIN ENDPOINTS
+# -----------------------------
+
+@app.route('/api/admin/libros', methods=['POST'])
+def agregar_libro():
+    data = request.get_json()
+    
+    # Verificar si el usuario es admin (esto debería implementarse con autenticación real)
+    # Por ahora, asumimos que es admin si se llama desde el frontend admin
+    
+    try:
+        libro_data = {
+            "id": data.get('id'),
+            "titulo": data.get('titulo'),
+            "autores": data.get('autores', []),
+            "descripcion": data.get('descripcion'),
+            "imagen": data.get('imagen'),
+            "precio": data.get('precio'),
+            "fecha_agregado": firestore.SERVER_TIMESTAMP
+        }
+        
+        # Guardar en Firestore
+        db.collection("libros_admin").document(libro_data['id']).set(libro_data)
+        
+        return jsonify({"mensaje": "Libro agregado exitosamente", "libro": libro_data}), 201
+    except Exception as e:
+        return jsonify({"error": f"Error al agregar libro: {str(e)}"}), 500
+
+@app.route('/api/admin/libros/<id>', methods=['DELETE'])
+def eliminar_libro(id):
+    try:
+        # Eliminar de Firestore
+        db.collection("libros_admin").document(id).delete()
+        
+        return jsonify({"mensaje": "Libro eliminado exitosamente"}), 200
+    except Exception as e:
+        return jsonify({"error": f"Error al eliminar libro: {str(e)}"}), 500
+
+@app.route('/api/admin/libros', methods=['GET'])
+def obtener_libros_admin():
+    try:
+        libros_ref = db.collection("libros_admin").stream()
+        libros = []
+        for libro in libros_ref:
+            libros.append(libro.to_dict())
+        
+        return jsonify({"libros": libros}), 200
+    except Exception as e:
+        return jsonify({"error": f"Error al obtener libros: {str(e)}"}), 500
 
 # Ejecutar la app en el servidor
 if __name__ == '__main__':
