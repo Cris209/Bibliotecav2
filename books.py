@@ -137,7 +137,8 @@ def buscar_libros():
     params = {
         'q': query,
         'maxResults': 10,
-        'langRestrict': 'es',  # Filtro para libros en español
+        'langRestrict': 'es',
+        'filter': 'paid-ebooks',
         'key': GOOGLE_BOOKS_API_KEY
     }
     
@@ -186,7 +187,8 @@ def mostrar_10_libros():
     params = {
         'q': 'fiction',
         'maxResults': 10,
-        'langRestrict': 'es',  # Filtro para libros en español
+        'langRestrict': 'es', 
+        'filter': 'paid-ebooks',
         'key': GOOGLE_BOOKS_API_KEY
     }
 
