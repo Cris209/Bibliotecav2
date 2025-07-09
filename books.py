@@ -152,10 +152,18 @@ def buscar_libros():
         volume_info = item.get('volumeInfo', {})
         imagen = volume_info.get('imageLinks', {}).get('thumbnail', '').replace('http://', 'https://') if 'imageLinks' in volume_info else ''
         sale_info = item.get('saleInfo', {})
-        retail_price = sale_info.get('retailPrice', {})
+        retail_price = sale_info.get('retailPrice')
+        saleability = sale_info.get('saleability', 'NOT_FOR_SALE')
 
-        precio = f"{retail_price.get('amount', 'No disponible')} {retail_price.get('currencyCode', '')}" \
-        if sale_info.get('saleability') == 'FOR_SALE' else "No disponible"
+        if saleability == 'FOR_SALE' and retail_price:
+            amount = retail_price.get('amount', 'No disponible')
+            currency = retail_price.get('currencyCode', '')
+            precio = f"{amount} {currency}"
+        elif saleability == 'FREE':
+            precio = "Gratis"
+        else:
+            precio = "No disponible"
+
         
         libro = {
             "id": item.get('id', ''),
@@ -193,10 +201,17 @@ def mostrar_10_libros():
         volume_info = item.get('volumeInfo', {})
         imagen = volume_info.get('imageLinks', {}).get('thumbnail', '').replace('http://', 'https://') if 'imageLinks' in volume_info else ''
         sale_info = item.get('saleInfo', {})
-        retail_price = sale_info.get('retailPrice', {})
+        retail_price = sale_info.get('retailPrice')
+        saleability = sale_info.get('saleability', 'NOT_FOR_SALE')
 
-        precio = f"{retail_price.get('amount', 'No disponible')} {retail_price.get('currencyCode', '')}" \
-        if sale_info.get('saleability') == 'FOR_SALE' else "No disponible"
+        if saleability == 'FOR_SALE' and retail_price:
+            amount = retail_price.get('amount', 'No disponible')
+            currency = retail_price.get('currencyCode', '')
+            precio = f"{amount} {currency}"
+        elif saleability == 'FREE':
+            precio = "Gratis"
+        else:
+            precio = "No disponible"
         
         libro = {
             "id": item.get('id', ''),
@@ -225,10 +240,17 @@ def obtener_libro(id):
         access_info = item.get('accessInfo', {})
 
         sale_info = item.get('saleInfo', {})
-        retail_price = sale_info.get('retailPrice', {})
+        retail_price = sale_info.get('retailPrice')
+        saleability = sale_info.get('saleability', 'NOT_FOR_SALE')
 
-        precio = f"{retail_price.get('amount', 'No disponible')} {retail_price.get('currencyCode', '')}" \
-        if sale_info.get('saleability') == 'FOR_SALE' else "No disponible"
+        if saleability == 'FOR_SALE' and retail_price:
+            amount = retail_price.get('amount', 'No disponible')
+            currency = retail_price.get('currencyCode', '')
+            precio = f"{amount} {currency}"
+        elif saleability == 'FREE':
+            precio = "Gratis"
+        else:
+            precio = "No disponible"
         
         # Procesar información de la imagen
         image_links = volume_info.get('imageLinks', {})
