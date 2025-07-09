@@ -151,6 +151,11 @@ def buscar_libros():
     for item in libros.get('items', []):
         volume_info = item.get('volumeInfo', {})
         imagen = volume_info.get('imageLinks', {}).get('thumbnail', '').replace('http://', 'https://') if 'imageLinks' in volume_info else ''
+        sale_info = item.get('saleInfo', {})
+        retail_price = sale_info.get('retailPrice', {})
+
+        precio = f"{retail_price.get('amount', 'No disponible')} {retail_price.get('currencyCode', '')}" \
+        if sale_info.get('saleability') == 'FOR SALE' else "No disponible"
         
         libro = {
             "id": item.get('id', ''),
@@ -159,6 +164,7 @@ def buscar_libros():
             "descripcion": volume_info.get('description', 'No disponible'),
             "imagen": imagen,
             "link": volume_info.get('infoLink', ''),
+            "precio": precio,
             "disponible_para_descarga": 'pdf' in item.get('accessInfo', {}).get('epub', {}).get('downloadLink', '') or 
                                       'pdf' in item.get('accessInfo', {}).get('pdf', {}).get('downloadLink', '')
         }
@@ -186,6 +192,11 @@ def mostrar_10_libros():
     for item in libros.get('items', []):
         volume_info = item.get('volumeInfo', {})
         imagen = volume_info.get('imageLinks', {}).get('thumbnail', '').replace('http://', 'https://') if 'imageLinks' in volume_info else ''
+        sale_info = item.get('saleInfo', {})
+        retail_price = sale_info.get('retailPrice', {})
+
+        precio = f"{retail_price.get('amount', 'No disponible')} {retail_price.get('currencyCode', '')}" \
+        if sale_info.get('saleability') == 'FOR SALE' else "No disponible"
         
         libro = {
             "id": item.get('id', ''),
@@ -194,6 +205,7 @@ def mostrar_10_libros():
             "descripcion": volume_info.get('description', 'No disponible'),
             "imagen": imagen,
             "link": volume_info.get('infoLink', ''),
+            "precio": precio,
             "disponible_para_descarga": 'pdf' in item.get('accessInfo', {}).get('epub', {}).get('downloadLink', '') or 
                                       'pdf' in item.get('accessInfo', {}).get('pdf', {}).get('downloadLink', '')
         }
@@ -211,6 +223,12 @@ def obtener_libro(id):
         item = response.json()
         volume_info = item.get('volumeInfo', {})
         access_info = item.get('accessInfo', {})
+
+        sale_info = item.get('saleInfo', {})
+        retail_price = sale_info.get('retailPrice', {})
+
+        precio = f"{retail_price.get('amount', 'No disponible')} {retail_price.get('currencyCode', '')}" \
+        if sale_info.get('saleability') == 'FOR SALE' else "No disponible"
         
         # Procesar información de la imagen
         image_links = volume_info.get('imageLinks', {})
@@ -229,6 +247,7 @@ def obtener_libro(id):
             "paginas": volume_info.get('pageCount', 0),
             "categorias": volume_info.get('categories', []),
             "link": volume_info.get('infoLink', ''),
+            "precio": precio,
             "disponible_para_descarga": access_info.get('pdf', {}).get('isAvailable', False) or 
                                         access_info.get('epub', {}).get('isAvailable', False),
             "download_links": {
