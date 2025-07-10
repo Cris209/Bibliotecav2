@@ -354,8 +354,16 @@ def agregar_libro():
         
         # Guardar en Firestore
         db.collection("libros_admin").document(libro_data['id']).set(libro_data)
-        
-        return jsonify({"mensaje": "Libro agregado exitosamente", "libro": libro_data}), 201
+
+        response_data = {
+            "id": data.get('id'),
+            "titulo": data.get('titulo'),
+            "autores": data.get('autores', []),
+            "descripcion": data.get('descripcion'),
+            "imagen": data.get('imagen'),
+            "precio": data.get('precio')
+        }
+        return jsonify({"mensaje": "Libro agregado exitosamente", "libro": response_data}), 201
     except Exception as e:
         return jsonify({"error": f"Error al agregar libro: {str(e)}"}), 500
 
