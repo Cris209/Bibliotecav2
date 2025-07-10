@@ -349,7 +349,7 @@ def agregar_libro():
             "descripcion": data.get('descripcion'),
             "imagen": data.get('imagen'),
             "precio": data.get('precio'),
-            "pdf_url": libro_data['pdf_url'],
+             "pdf_url": data.get('pdf_url', ''),
             "fecha_agregado": firestore.SERVER_TIMESTAMP
         }
         
@@ -363,7 +363,7 @@ def agregar_libro():
             "descripcion": data.get('descripcion'),
             "imagen": data.get('imagen'),
             "precio": data.get('precio'),
-            "pdf_url": libro_data['pdf_url']
+             "pdf_url": data.get('pdf_url', '')
         }
         return jsonify({"mensaje": "Libro agregado exitosamente", "libro": response_data}), 201
     except Exception as e:
