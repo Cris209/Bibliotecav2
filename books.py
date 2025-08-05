@@ -7,7 +7,7 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, firestore, auth
-from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from threading import Lock
@@ -33,23 +33,57 @@ def generate_key():
         salt=SALT,
         iterations=100000,
     )
-    return base64.urlsafe_b64encode(kdf.derive(SECRET_KEY.encode()))
-
-cipher_suite = Fernet(generate_key())
+    return kdf.derive(SECRET_KEY.encode())
 
 def encrypt_data(data):
     try:
         json_data = json.dumps(data, ensure_ascii=False)
-        encrypted_data = cipher_suite.encrypt(json_data.encode('utf-8'))
-        return base64.b64encode(encrypted_data).decode('utf-8')
+        key = generate_key()
+        
+        # Generate a random IV
+        iv = os.urandom(16)
+        
+        # Create cipher
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+        encryptor = cipher.encryptor()
+        
+        # Pad the data to be a multiple of 16 bytes
+        padded_data = json_data.encode('utf-8')
+        padding_length = 16 - (len(padded_data) % 16)
+        padded_data += bytes([padding_length] * padding_length)
+        
+        # Encrypt
+        encrypted_data = encryptor.update(padded_data) + encryptor.finalize()
+        
+        # Combine IV and encrypted data
+        combined = iv + encrypted_data
+        return base64.b64encode(combined).decode('utf-8')
     except Exception as e:
         print(f"Encryption error: {e}")
         return None
 
 def decrypt_data(encrypted_data):
     try:
-        encrypted_bytes = base64.b64decode(encrypted_data.encode('utf-8'))
-        decrypted_data = cipher_suite.decrypt(encrypted_bytes)
+        # Decode from base64
+        combined = base64.b64decode(encrypted_data.encode('utf-8'))
+        
+        # Extract IV and encrypted data
+        iv = combined[:16]
+        encrypted_data = combined[16:]
+        
+        key = generate_key()
+        
+        # Create cipher
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+        decryptor = cipher.decryptor()
+        
+        # Decrypt
+        decrypted_data = decryptor.update(encrypted_data) + decryptor.finalize()
+        
+        # Remove padding
+        padding_length = decrypted_data[-1]
+        decrypted_data = decrypted_data[:-padding_length]
+        
         return json.loads(decrypted_data.decode('utf-8'))
     except Exception as e:
         print(f"Decryption error: {e}")
