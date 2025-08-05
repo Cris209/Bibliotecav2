@@ -7,13 +7,66 @@ import json
 import os
 import bcrypt
 from threading import Lock
-from encryption import encrypt_response, decrypt_request
+import base64
+from cryptography.fernet import Fernet
 
 app = Flask(__name__)
 CORS(app)
 
 # Configuración de Google Books API
 GOOGLE_BOOKS_API_URL = "https://www.googleapis.com/books/v1"
+
+# Simple encryption key (in production, use environment variables)
+SECRET_KEY = b'your-secret-key-here-32-chars-long!'
+
+def get_fernet():
+    """Create a Fernet instance for encryption/decryption"""
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=b'static_salt_here',
+        iterations=100000,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(SECRET_KEY))
+    return Fernet(key)
+
+def encrypt_data(data):
+    """Encrypt data using Fernet"""
+    try:
+        json_string = json.dumps(data, ensure_ascii=False)
+        fernet = get_fernet()
+        encrypted = fernet.encrypt(json_string.encode('utf-8'))
+        return base64.b64encode(encrypted).decode('utf-8')
+    except Exception as e:
+        print(f"Error encrypting data: {e}")
+        return None
+
+def decrypt_data(encrypted_data):
+    """Decrypt data using Fernet"""
+    try:
+        encrypted_bytes = base64.b64decode(encrypted_data.encode('utf-8'))
+        fernet = get_fernet()
+        decrypted = fernet.decrypt(encrypted_bytes)
+        return json.loads(decrypted.decode('utf-8'))
+    except Exception as e:
+        print(f"Error decrypting data: {e}")
+        return None
+
+def encrypt_response(data):
+    """Encrypt response data"""
+    encrypted = encrypt_data(data)
+    if encrypted:
+        return {"encrypted_data": encrypted}
+    return data
+
+def decrypt_request(request_data):
+    """Decrypt request data"""
+    if isinstance(request_data, dict) and "encrypted_data" in request_data:
+        return decrypt_data(request_data["encrypted_data"])
+    return request_data
 
 # -----------------------------
 # PATRÓN SINGLETON: FirebaseManager
@@ -30,7 +83,6 @@ class FirebaseManager:
                 firebase_admin.initialize_app(cred)
                 cls._instance = super().__new__(cls)
                 cls._instance.db = firestore.client()
-                # Obtener Google Books API Key desde la misma configuración
                 cls._instance.google_books_api_key = service_account_info.get("GOOGLE_BOOKS_API_KEY") or os.getenv("GOOGLE_BOOKS_API_KEY")
         return cls._instance
 
@@ -71,12 +123,84 @@ def encriptar_contraseña(password):
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 # -----------------------------
+# SIMULATED BOOK DATA (Temporary fix)
+# -----------------------------
+def get_simulated_books():
+    """Return simulated book data instead of calling Google Books API"""
+    return {
+        "resultados": [
+            {
+                "id": "book1",
+                "titulo": "El Señor de los Anillos",
+                "autores": ["J.R.R. Tolkien"],
+                "descripcion": "Una épica historia de fantasía sobre la lucha contra el mal.",
+                "imagen": "https://via.placeholder.com/128x200/4A90E2/FFFFFF?text=Libro+1",
+                "link": "https://example.com/book1",
+                "precio": "Gratis",
+                "disponible_para_descarga": True
+            },
+            {
+                "id": "book2",
+                "titulo": "Cien Años de Soledad",
+                "autores": ["Gabriel García Márquez"],
+                "descripcion": "Una obra maestra del realismo mágico latinoamericano.",
+                "imagen": "https://via.placeholder.com/128x200/E74C3C/FFFFFF?text=Libro+2",
+                "link": "https://example.com/book2",
+                "precio": "Gratis",
+                "disponible_para_descarga": True
+            },
+            {
+                "id": "book3",
+                "titulo": "Don Quijote de la Mancha",
+                "autores": ["Miguel de Cervantes"],
+                "descripcion": "La primera novela moderna y una de las mejores obras de la literatura universal.",
+                "imagen": "https://via.placeholder.com/128x200/F39C12/FFFFFF?text=Libro+3",
+                "link": "https://example.com/book3",
+                "precio": "Gratis",
+                "disponible_para_descarga": False
+            },
+            {
+                "id": "book4",
+                "titulo": "Rayuela",
+                "autores": ["Julio Cortázar"],
+                "descripcion": "Una novela experimental que revolucionó la literatura latinoamericana.",
+                "imagen": "https://via.placeholder.com/128x200/9B59B6/FFFFFF?text=Libro+4",
+                "link": "https://example.com/book4",
+                "precio": "Gratis",
+                "disponible_para_descarga": True
+            },
+            {
+                "id": "book5",
+                "titulo": "Pedro Páramo",
+                "autores": ["Juan Rulfo"],
+                "descripcion": "Una obra fundamental de la literatura mexicana del siglo XX.",
+                "imagen": "https://via.placeholder.com/128x200/1ABC9C/FFFFFF?text=Libro+5",
+                "link": "https://example.com/book5",
+                "precio": "Gratis",
+                "disponible_para_descarga": True
+            }
+        ]
+    }
+
+def search_simulated_books(query):
+    """Search in simulated books"""
+    all_books = get_simulated_books()["resultados"]
+    query_lower = query.lower()
+    
+    filtered_books = [
+        book for book in all_books
+        if query_lower in book["titulo"].lower() or 
+           any(query_lower in autor.lower() for autor in book["autores"])
+    ]
+    
+    return {"resultados": filtered_books}
+
+# -----------------------------
 # RUTAS
 # -----------------------------
 @app.route('/api/registrarse', methods=['POST'])
 def registrarse():
     try:
-        # Decrypt request data
         data = decrypt_request(request.get_json())
         
         nombre = data.get('nombre')
@@ -85,19 +209,17 @@ def registrarse():
         password = data.get('password')
         tipo_usuario = data.get('tipo', 'normal')
 
-        # Validación de campos
         if not nombre or not apellido or not gmail or not password:
             return jsonify(encrypt_response({"error": "Todos los campos son obligatorios."})), 400
 
         if not gmail.endswith("@gmail.com"):
-            return jsonify(encrypt_response({"error": "El correo debe ser un Gmail válido (ejemplo@gmail.com)."})), 400
+            return jsonify(encrypt_response({"error": "El correo debe ser un Gmail válido."})), 400
 
         usuario = UserFactory.crear_usuario(tipo_usuario, gmail, password)
         password_encriptada = encriptar_contraseña(usuario.password)
 
         user = auth.create_user(email=usuario.email, password=usuario.password)
 
-        # Guardar datos adicionales en Firestore
         db.collection("usuarios").document(user.uid).set({
             "nombre": nombre,
             "apellido": apellido,
@@ -113,7 +235,6 @@ def registrarse():
 @app.route('/api/iniciar_sesion', methods=['POST'])
 def iniciar_sesion():
     try:
-        # Decrypt request data
         data = decrypt_request(request.get_json())
         email = data.get('email')
         password = data.get('password')
@@ -141,7 +262,17 @@ def obtener_usuario(uid):
     except Exception as e:
         return jsonify(encrypt_response({"error": f"Error al obtener datos del usuario: {str(e)}"})), 500
 
-# Endpoint para buscar libros con un término específico
+# Endpoint para mostrar libros (usando datos simulados)
+@app.route('/api/libros', methods=['GET'])
+def mostrar_libros():
+    try:
+        # Use simulated data instead of Google Books API
+        libros = get_simulated_books()
+        return jsonify(encrypt_response(libros))
+    except Exception as e:
+        return jsonify(encrypt_response({"error": f"Error al obtener libros: {str(e)}"})), 500
+
+# Endpoint para buscar libros (usando datos simulados)
 @app.route('/api/buscar_libros', methods=['GET'])
 def buscar_libros():
     try:
@@ -149,207 +280,46 @@ def buscar_libros():
         if not query:
             return jsonify(encrypt_response({"error": "El parámetro 'query' es obligatorio."})), 400
         
-        params = {
-            'q': query,
-            'maxResults': 10,
-            'langRestrict': 'es',
-            'filter': 'paid-ebooks',
-            'key': GOOGLE_BOOKS_API_KEY
-        }
-        
-        response = requests.get(f"{GOOGLE_BOOKS_API_URL}/volumes", params=params)
-        
-        if response.status_code != 200:
-            return jsonify(encrypt_response({"error": "Error al obtener datos de Google Books API"})), 500
-        
-        libros = response.json()
-        resultados = []
-        for item in libros.get('items', []):
-            volume_info = item.get('volumeInfo', {})
-            imagen = volume_info.get('imageLinks', {}).get('thumbnail', '').replace('http://', 'https://') if 'imageLinks' in volume_info else ''
-            sale_info = item.get('saleInfo', {})
-            retail_price = sale_info.get('retailPrice')
-            saleability = sale_info.get('saleability', 'NOT_FOR_SALE')
-
-            if saleability == 'FOR_SALE' and retail_price:
-                amount = retail_price.get('amount', 'No disponible')
-                currency = retail_price.get('currencyCode', '')
-                precio = f"{amount} {currency}"
-            elif saleability == 'FREE':
-                precio = "Gratis"
-            else:
-                precio = "No disponible"
-
-            libro = {
-                "id": item.get('id', ''),
-                "titulo": volume_info.get('title', 'Título no disponible'),
-                "autores": volume_info.get('authors', []),
-                "descripcion": volume_info.get('description', 'No disponible'),
-                "imagen": imagen,
-                "link": volume_info.get('infoLink', ''),
-                "precio": precio,
-                "disponible_para_descarga": 'pdf' in item.get('accessInfo', {}).get('epub', {}).get('downloadLink', '') or 
-                                          'pdf' in item.get('accessInfo', {}).get('pdf', {}).get('downloadLink', '')
-            }
-            resultados.append(libro)
-
-        return jsonify(encrypt_response({"resultados": resultados}))
+        # Use simulated search instead of Google Books API
+        resultados = search_simulated_books(query)
+        return jsonify(encrypt_response(resultados))
     except Exception as e:
         return jsonify(encrypt_response({"error": f"Error al buscar libros: {str(e)}"})), 500
 
-# Endpoint para mostrar 10 libros predeterminados
-@app.route('/api/libros', methods=['GET'])
-def mostrar_10_libros():
-    try:
-        params = {
-            'q': 'fiction',
-            'maxResults': 10,
-            'langRestrict': 'es', 
-            'filter': 'paid-ebooks',
-            'key': GOOGLE_BOOKS_API_KEY
-        }
-
-        response = requests.get(f"{GOOGLE_BOOKS_API_URL}/volumes", params=params)
-
-        if response.status_code != 200:
-            return jsonify(encrypt_response({"error": "Error al obtener datos de Google Books API"})), 500
-
-        libros = response.json()
-        resultados = []
-        for item in libros.get('items', []):
-            volume_info = item.get('volumeInfo', {})
-            imagen = volume_info.get('imageLinks', {}).get('thumbnail', '').replace('http://', 'https://') if 'imageLinks' in volume_info else ''
-            sale_info = item.get('saleInfo', {})
-            retail_price = sale_info.get('retailPrice')
-            saleability = sale_info.get('saleability', 'NOT_FOR_SALE')
-
-            if saleability == 'FOR_SALE' and retail_price:
-                amount = retail_price.get('amount', 'No disponible')
-                currency = retail_price.get('currencyCode', '')
-                precio = f"{amount} {currency}"
-            elif saleability == 'FREE':
-                precio = "Gratis"
-            else:
-                precio = "No disponible"
-            
-            libro = {
-                "id": item.get('id', ''),
-                "titulo": volume_info.get('title', 'Título no disponible'),
-                "autores": volume_info.get('authors', []),
-                "descripcion": volume_info.get('description', 'No disponible'),
-                "imagen": imagen,
-                "link": volume_info.get('infoLink', ''),
-                "precio": precio,
-                "disponible_para_descarga": 'pdf' in item.get('accessInfo', {}).get('epub', {}).get('downloadLink', '') or 
-                                          'pdf' in item.get('accessInfo', {}).get('pdf', {}).get('downloadLink', '')
-            }
-            resultados.append(libro)
-
-        return jsonify(encrypt_response({"resultados": resultados}))
-    except Exception as e:
-        return jsonify(encrypt_response({"error": f"Error al obtener libros: {str(e)}"})), 500
-    
 # Endpoint para obtener detalles de un libro específico
 @app.route('/api/libros/<id>', methods=['GET'])
 def obtener_libro(id):
     try:
-        response = requests.get(f"{GOOGLE_BOOKS_API_URL}/volumes/{id}?key={GOOGLE_BOOKS_API_KEY}")
-        response.raise_for_status()
+        # Get book from simulated data
+        all_books = get_simulated_books()["resultados"]
+        libro = next((book for book in all_books if book["id"] == id), None)
         
-        item = response.json()
-        volume_info = item.get('volumeInfo', {})
-        access_info = item.get('accessInfo', {})
-
-        sale_info = item.get('saleInfo', {})
-        retail_price = sale_info.get('retailPrice')
-        saleability = sale_info.get('saleability', 'NOT_FOR_SALE')
-
-        if saleability == 'FOR_SALE' and retail_price:
-            amount = retail_price.get('amount', 'No disponible')
-            currency = retail_price.get('currencyCode', '')
-            precio = f"{amount} {currency}"
-        elif saleability == 'FREE':
-            precio = "Gratis"
-        else:
-            precio = "No disponible"
+        if not libro:
+            return jsonify(encrypt_response({"error": "Libro no encontrado"})), 404
         
-        # Procesar información de la imagen
-        image_links = volume_info.get('imageLinks', {})
-        imagen = image_links.get('thumbnail', '').replace('http://', 'https://')
-        if not imagen and 'smallThumbnail' in image_links:
-            imagen = image_links['smallThumbnail'].replace('http://', 'https://')
-        
-        libro = {
-            "id": id,
-            "titulo": volume_info.get('title', 'Título no disponible'),
-            "autores": volume_info.get('authors', []),
-            "descripcion": volume_info.get('description', 'Descripción no disponible'),
-            "imagen": imagen,
-            "fecha_publicacion": volume_info.get('publishedDate', ''),
-            "editorial": volume_info.get('publisher', ''),
-            "paginas": volume_info.get('pageCount', 0),
-            "categorias": volume_info.get('categories', []),
-            "link": volume_info.get('infoLink', ''),
-            "precio": precio,
-            "disponible_para_descarga": access_info.get('pdf', {}).get('isAvailable', False) or 
-                                        access_info.get('epub', {}).get('isAvailable', False),
+        # Add more details for the book
+        libro_detallado = {
+            **libro,
+            "fecha_publicacion": "2023",
+            "editorial": "Editorial Simulada",
+            "paginas": 300,
+            "categorias": ["Ficción", "Literatura"],
             "download_links": {
-                "pdf": access_info.get('pdf', {}).get('downloadLink', ''),
-                "epub": access_info.get('epub', {}).get('downloadLink', '')
+                "pdf": "https://example.com/download.pdf" if libro["disponible_para_descarga"] else "",
+                "epub": "https://example.com/download.epub" if libro["disponible_para_descarga"] else ""
             }
         }
         
-        return jsonify(encrypt_response(libro))
+        return jsonify(encrypt_response(libro_detallado))
         
     except Exception as e:
         return jsonify(encrypt_response({"error": f"Error al obtener detalles del libro: {str(e)}"})), 500
 
-@app.route('/api/libros/<id>/disponibilidad', methods=['GET'])
-def verificar_disponibilidad_descarga(id):
-    try:
-        response = requests.get(f"{GOOGLE_BOOKS_API_URL}/volumes/{id}?key={GOOGLE_BOOKS_API_KEY}")
-        response.raise_for_status()
-        
-        item = response.json()
-        access_info = item.get('accessInfo', {})
-        
-        pdf_available = access_info.get('pdf', {}).get('isAvailable', False)
-        epub_available = access_info.get('epub', {}).get('isAvailable', False)
-        
-        disponible = pdf_available or epub_available
-        
-        if disponible:
-            return jsonify(encrypt_response({
-                "disponible": True,
-                "formato": "PDF" if pdf_available else "EPUB",
-                "download_link": access_info.get('pdf', {}).get('downloadLink', '') if pdf_available else 
-                               access_info.get('epub', {}).get('downloadLink', ''),
-                "mensaje": "Disponible para descarga"
-            }))
-        else:
-            return jsonify(encrypt_response({
-                "disponible": False,
-                "mensaje": "Este libro no está disponible para descarga"
-            }))
-        
-    except Exception as e:
-        return jsonify(encrypt_response({
-            "error": f"Error al verificar disponibilidad: {str(e)}",
-            "disponible": False
-        })), 500
-
-# -----------------------------
-# ADMIN ENDPOINTS
-# -----------------------------
-
+# Admin endpoints
 @app.route('/api/admin/libros', methods=['POST'])
 def agregar_libro():
     try:
-        # Decrypt request data
         data = decrypt_request(request.get_json())
-        
-        # Verificar si el usuario es admin (esto debería implementarse con autenticación real)
-        # Por ahora, asumimos que es admin si se llama desde el frontend admin
         
         libro_data = {
             "id": data.get('id'),
@@ -362,7 +332,6 @@ def agregar_libro():
             "fecha_agregado": firestore.SERVER_TIMESTAMP
         }
         
-        # Guardar en Firestore
         db.collection("libros_admin").document(libro_data['id']).set(libro_data)
 
         response_data = {
@@ -381,9 +350,7 @@ def agregar_libro():
 @app.route('/api/admin/libros/<id>', methods=['DELETE'])
 def eliminar_libro(id):
     try:
-        # Eliminar de Firestore
         db.collection("libros_admin").document(id).delete()
-        
         return jsonify(encrypt_response({"mensaje": "Libro eliminado exitosamente"})), 200
     except Exception as e:
         return jsonify(encrypt_response({"error": f"Error al eliminar libro: {str(e)}"})), 500
@@ -400,20 +367,15 @@ def obtener_libros_admin():
     except Exception as e:
         return jsonify(encrypt_response({"error": f"Error al obtener libros: {str(e)}"})), 500
 
-# -----------------------------
-# PAYMENT ENDPOINT
-# -----------------------------
+# Payment endpoint
 @app.route('/api/payment', methods=['POST'])
 def process_payment():
     try:
-        # Decrypt request data
         data = decrypt_request(request.get_json())
         
-        # Simulate payment processing
         import uuid
         order_id = str(uuid.uuid4())
         
-        # Save order to Firestore
         order_data = {
             "order_id": order_id,
             "user_id": data.get('user_id'),
