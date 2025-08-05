@@ -205,8 +205,12 @@ def mostrar_10_libros():
 
     response = requests.get(f"{GOOGLE_BOOKS_API_URL}/volumes", params=params)
 
-    if response.status_code != 200:
-        return jsonify({"error": "Error al obtener datos de Google Books API"}), 500
+   if response.status_code != 200:
+    return jsonify({
+        "error": "Error al obtener datos de Google Books API",
+        "detalle": response.text,
+        "status_code": response.status_code
+    }), 500
 
     libros = response.json()
     resultados = []
