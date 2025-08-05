@@ -63,6 +63,6 @@ urllib3==2.2.3
 virtualenv==20.29.1
 Werkzeug==3.0.4
 yarl==1.12.1
-requests==2.32.3
-bcrypt
-python-dotenv
+cryptography==41.0.7
+requests==2.31.0
+bcrypt==4.0.1
